@@ -1,0 +1,30 @@
+stages:
+  - mirror
+
+mirror_to_github:
+  stage: mirror
+  image: alpine:3.20
+  rules:
+    - if: '$CI_PIPELINE_SOURCE =~ /push|web|schedule/'
+
+  before_script:
+    - apk add --no-cache git git-lfs openssh
+    - git lfs install
+    - eval "$(ssh-agent -s)"
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+
+    - echo "$GITHUB_SSH_PRIVATE_KEY_B64" | base64 -d > ~/.ssh/github_mirror_ci
+    - chmod 600 ~/.ssh/github_mirror_ci
+    - ssh-keygen -l -f ~/.ssh/github_mirror_ci || (echo "clé invalide" && exit 1)
+    - ssh-add ~/.ssh/github_mirror_ci
+
+    - ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts
+
+    - git config --global user.name "GitLab Mirror Bot"
+    - git config --global user.email "mirror-bot@users.noreply.gitlab.com"
+
+  script:
+    - git remote remove github 2>/dev/null || true
+    - git remote add github "git@github.com:pasdepseud0/Go2Campus.git"
+    - git fetch origin --prune
+    - git push --prune github +refs/remotes/origin/*:refs/heads/* +refs/tags/*:refs/tags/*
